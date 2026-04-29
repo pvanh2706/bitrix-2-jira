@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: #f9fafb;
+  color: #111827;
+}

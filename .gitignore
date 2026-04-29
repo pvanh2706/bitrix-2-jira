@@ -1,0 +1,67 @@
+# ============================================================
+# .NET / C#
+# ============================================================
+
+# Build outputs
+**/bin/
+**/obj/
+
+# User-specific files
+*.user
+*.userosscache
+*.suo
+*.userprefs
+
+# Visual Studio files
+.vs/
+*.rsuser
+*.vsp
+*.vspx
+
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/
+!**/packages/build/
+*.lock.json
+project.lock.json
+
+# Test results
+TestResults/
+[Tt]est[Rr]esult*/
+BenchmarkDotNet.Artifacts/
+
+# Publish output
+publish/
+PublishProfiles/
+
+# SQLite database files (runtime data)
+*.db
+*.db-shm
+*.db-wal
+
+# ============================================================
+# Sensitive configuration — NEVER commit these
+# ============================================================
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Staging.json
+secrets.json
+.env
+.env.*
+!.env.example
+
+# ============================================================
+# Node / Vue / Vite (frontend)
+# ============================================================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.local
+
+# ============================================================
+# OS / Editor
+# ============================================================
+.DS_Store
+Thumbs.db
+*.log

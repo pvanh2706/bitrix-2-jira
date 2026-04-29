@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet restore *)",
+      "Bash(sed -i 's/namespace BitrixJiraConnector\\\\.Models/namespace BitrixJiraConnector.Api.Models.Database/g' \"d:/Code/14. BitrixJiraConnector/BitrixJiraConnector.Api/Migrations/\"*.cs)",
+      "Bash(sed -i 's/using BitrixJiraConnector\\\\.Models;/using BitrixJiraConnector.Api.Models.Database;/g' \"d:/Code/14. BitrixJiraConnector/BitrixJiraConnector.Api/Migrations/\"*.cs)",
+      "Bash(sed -i 's/namespace BitrixJiraConnector\\\\.Migrations/namespace BitrixJiraConnector.Api.Migrations/g' \"d:/Code/14. BitrixJiraConnector/BitrixJiraConnector.Api/Migrations/\"*.cs)",
+      "Bash(sed -i 's/\"BitrixJiraConnector\\\\.Models\\\\.\\\\\\(BitrixJiraInfo\\\\|ConfigData\\\\|ExceptionLog\\\\\\)\"/\"BitrixJiraConnector.Api.Models.Database.\\\\1\"/g' \"d:/Code/14. BitrixJiraConnector/BitrixJiraConnector.Api/Migrations/\"*.cs)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet sln *)",
+      "Bash(npm create *)"
+    ]
+  }
+}
