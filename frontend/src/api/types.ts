@@ -5,6 +5,12 @@ export interface ApiResponse<T> {
   message: string
 }
 
+// Admin user (from /api/auth/users)
+export interface AdminUser {
+  id: number
+  username: string
+}
+
 // GET /api/deals | GET /api/deals/{id}
 export interface DealSummaryDto {
   bitrix_DealID: number

@@ -62,12 +62,14 @@ Configurations/
  ConfigJiraBitrix.cs
  EnumDataDefine.cs
 Controllers/
+ AuthController.cs
  ConfigController.cs
  DealsController.cs
  HealthController.cs
 Helpers/
  BitrixConvertData.cs
  CheckRequireFieldBitrix.cs
+ PasswordHasher.cs
 Middleware/ApiKeyMiddleware.cs
 Migrations/
  20240618083630_AddTable_BitrixJiraInfo.cs
@@ -88,6 +90,8 @@ Migrations/
  20260501000002_SeedConfigData.Designer.cs
  20260501000003_SeedCredentials.cs
  20260501000003_SeedCredentials.Designer.cs
+ 20260502000000_AddAdminUsers.cs
+ 20260502000000_AddAdminUsers.Designer.cs
  AppDbContextModelSnapshot.cs
 Models/Bitrix/
  BitrixDataDeal.cs
@@ -97,6 +101,7 @@ Models/Bitrix/
  FileHopDongAttach.cs
  UserBitrix.cs
 Models/Database/
+ AdminUser.cs
  AppDbContext.cs
  AppDbContextFactory.cs
  BitrixFieldMapping.cs

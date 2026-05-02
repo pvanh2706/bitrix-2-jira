@@ -7,8 +7,9 @@ public class ApiKeyMiddleware(RequestDelegate next, IConfiguration configuration
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // Skip auth for health endpoint so monitoring tools can probe without a key
-        if (context.Request.Path.StartsWithSegments("/api/health", StringComparison.OrdinalIgnoreCase))
+        // Skip auth for health and login endpoints
+        if (context.Request.Path.StartsWithSegments("/api/health", StringComparison.OrdinalIgnoreCase)
+            || context.Request.Path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase))
         {
             await next(context);
             return;

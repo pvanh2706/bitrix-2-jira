@@ -1,5 +1,6 @@
 using BitrixJiraConnector.Api.BackgroundServices;
 using BitrixJiraConnector.Api.Configurations;
+using BitrixJiraConnector.Api.Helpers;
 using BitrixJiraConnector.Api.Middleware;
 using BitrixJiraConnector.Api.Models.Database;
 using BitrixJiraConnector.Api.Services;
@@ -53,6 +54,19 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+
+    // Seed default admin from appsettings if no admin users exist yet
+    if (!db.AdminUsers.Any())
+    {
+        var username = app.Configuration["AdminCredentials:Username"] ?? "admin";
+        var password = app.Configuration["AdminCredentials:Password"] ?? "changeme123";
+        db.AdminUsers.Add(new AdminUser
+        {
+            Username = username,
+            PasswordHash = PasswordHasher.Hash(password),
+        });
+        db.SaveChanges();
+    }
 }
 
 if (app.Environment.IsDevelopment())

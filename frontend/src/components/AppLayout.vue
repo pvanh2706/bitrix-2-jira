@@ -1,14 +1,28 @@
 <script setup lang="ts">
-import { RouterLink, useRoute } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
+const router = useRouter()
+const { isAdmin, logout } = useAuth()
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: '⬛' },
-  { to: '/deals', label: 'Danh sách Deal', icon: '📋' },
-  { to: '/create-issue', label: 'Tạo Issue', icon: '➕' },
-  { to: '/config', label: 'Cấu hình', icon: '⚙️' },
+const allNavItems = [
+  { to: '/', label: 'Dashboard', icon: '⬛', adminOnly: true },
+  { to: '/deals', label: 'Danh sách Deal', icon: '📋', adminOnly: true },
+  { to: '/create-issue', label: 'Tạo Issue', icon: '➕', adminOnly: false },
+  { to: '/config', label: 'Cấu hình', icon: '⚙️', adminOnly: true },
+  { to: '/admin-users', label: 'Tài khoản Admin', icon: '👤', adminOnly: true },
 ]
+
+const navItems = computed(() =>
+  allNavItems.filter((item) => !item.adminOnly || isAdmin.value),
+)
+
+function handleLogout() {
+  logout()
+  router.push({ name: 'create-issue' })
+}
 </script>
 
 <template>
@@ -34,8 +48,27 @@ const navItems = [
           {{ item.label }}
         </RouterLink>
       </nav>
-      <div class="px-4 py-3 border-t border-gray-200 text-xs text-gray-400">
-        EzCloud · v1.0
+      <div class="px-4 py-3 border-t border-gray-200 space-y-2">
+        <!-- Admin: show logout button -->
+        <template v-if="isAdmin">
+          <p class="text-xs text-gray-500 truncate">👤 Admin</p>
+          <button
+            class="w-full text-left text-xs text-red-500 hover:text-red-700 transition"
+            @click="handleLogout"
+          >
+            Đăng xuất
+          </button>
+        </template>
+        <!-- Guest: show login link -->
+        <template v-else>
+          <RouterLink
+            to="/login"
+            class="block text-xs text-indigo-500 hover:text-indigo-700 transition"
+          >
+            🔑 Đăng nhập admin
+          </RouterLink>
+        </template>
+        <p class="text-xs text-gray-400">EzCloud · v1.0</p>
       </div>
     </aside>
 
@@ -52,3 +85,4 @@ const navItems = [
     </main>
   </div>
 </template>
+

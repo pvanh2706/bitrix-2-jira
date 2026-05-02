@@ -17,6 +17,17 @@ namespace BitrixJiraConnector.Api.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "7.0.0");
 
+            modelBuilder.Entity("BitrixJiraConnector.Api.Models.Database.AdminUser", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+                    b.Property<string>("Username").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("PasswordHash").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.ToTable("AdminUsers");
+                });
+
             modelBuilder.Entity("BitrixJiraConnector.Api.Models.Database.BitrixJiraInfo", b =>
                 {
                     b.Property<int>("Bitrix_DealID")
