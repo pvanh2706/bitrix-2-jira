@@ -151,6 +151,29 @@ public class DealProcessingService : IDealProcessingService
             return new ProcessDealResult { Success = true, Message = dealResult.Message };
         }
 
+        // Nếu DB đã có Jira_Link (tức là issue đã tạo thành công nhưng PostJiraDataToDealAsync
+        // thất bại trước đó nên Bitrix field vẫn rỗng), retry ghi về Bitrix thay vì tạo lại issue.
+        var priorRecord = await _dbService.GetDealByDealIdAsync(dealId);
+        if (priorRecord != null && !string.IsNullOrEmpty(priorRecord.Jira_Link))
+        {
+            string priorKey = priorRecord.Jira_Link.Split('/').Last();
+            _logger.LogWarning(
+                "Deal {DealId} đã có Jira issue {JiraKey} trong DB nhưng Bitrix field chưa cập nhật — thử ghi lại",
+                dealId, priorKey);
+            var deal2 = dealResult.DataDeal!;
+            try
+            {
+                await _bitrixService.PostJiraDataToDealAsync(deal2, priorKey);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Retry PostJiraDataToDealAsync vẫn thất bại cho deal {DealId} / {JiraKey}",
+                    dealId, priorKey);
+            }
+            return new ProcessDealResult { Success = true, JiraKey = priorKey, JiraUrl = priorRecord.Jira_Link, Message = "Retried Bitrix write for existing issue" };
+        }
+
         // Create Jira issue
         var deal = dealResult.DataDeal!;
         var issue = await _jiraService.CreateIssueAsync(deal);

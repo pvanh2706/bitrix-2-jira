@@ -148,41 +148,41 @@ public class BitrixService : IBitrixService
         JToken result = responseConvert.result;
         if (result == null || !result.Any()) return contact;
 
-        foreach (dynamic item in result)
+        // Batch-fetch all contacts in a single API call to avoid N+1 calls
+        var contactIds = result
+            .Select(item => item["CONTACT_ID"]?.ToString())
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToArray();
+        if (contactIds.Length == 0) return contact;
+
+        var batchData = new
         {
-            string contactId = item.CONTACT_ID;
-            var infoResult = await GetContactByIdAsync(contactId);
-            if (infoResult.LaThongTinLienHeKhiTrienKhai)
-                return infoResult.ContactBitrix;
+            filter = new Dictionary<string, object> { ["ID"] = contactIds },
+            select = new[] { "ID", "NAME", "LAST_NAME", "POST", "PHONE", "EMAIL", "UF_CRM_1715045713" },
+        };
+        string batchResponse = await PostAsync(_bitrixSettings.ApiUrl + "/crm.contact.list", batchData);
+        dynamic batchConvert = JsonConvert.DeserializeObject<dynamic>(batchResponse)!;
+        JToken contacts = batchConvert.result;
+        if (contacts == null) return contact;
+
+        foreach (dynamic item in contacts)
+        {
+            bool isLienHe = item.UF_CRM_1715045713?.ToString() == "1";
+            if (!isLienHe) continue;
+
+            var c = new ContactBitrix
+            {
+                LastName = item.LAST_NAME ?? "",
+                Name = item.NAME ?? "",
+                Position = item.POST ?? "",
+            };
+            JToken phones = item.PHONE;
+            if (phones != null && phones.Any()) c.Phone = phones.First!["VALUE"]?.ToString() ?? "";
+            JToken emails = item.EMAIL;
+            if (emails != null && emails.Any()) c.Email = emails.First!["VALUE"]?.ToString() ?? "";
+            return c;
         }
         return contact;
-    }
-
-    private async Task<ContactInforResult> GetContactByIdAsync(string contactId)
-    {
-        var result = new ContactInforResult { LaThongTinLienHeKhiTrienKhai = false };
-        string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_CONTACT_DATA + contactId;
-        string response = await GetAsync(url);
-        dynamic responseConvert = JsonConvert.DeserializeObject<dynamic>(response)!;
-        dynamic data = responseConvert.result;
-        if (data == null) return result;
-
-        bool isLienHe = data.UF_CRM_1715045713?.ToString() == "1";
-        if (!isLienHe) return result;
-
-        result.LaThongTinLienHeKhiTrienKhai = true;
-        var contact = new ContactBitrix
-        {
-            LastName = data.LAST_NAME ?? "",
-            Name = data.NAME ?? "",
-            Position = data.POST ?? "",
-        };
-        JToken phones = data.PHONE;
-        if (phones != null && phones.Any()) contact.Phone = phones.First!["VALUE"]?.ToString() ?? "";
-        JToken emails = data.EMAIL;
-        if (emails != null && emails.Any()) contact.Email = emails.First!["VALUE"]?.ToString() ?? "";
-        result.ContactBitrix = contact;
-        return result;
     }
 
     private async Task<List<DataProductInDeal>> GetProductsInDealAsync(string dealId)
@@ -451,18 +451,46 @@ public class BitrixService : IBitrixService
 
     private async Task<string> PostAsync(string url, object data)
     {
-        var client = _httpClientFactory.CreateClient("Bitrix");
-        var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
-        var response = await client.PostAsync(url, content);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        return await RetryAsync(async () =>
+        {
+            var client = _httpClientFactory.CreateClient("Bitrix");
+            var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
+            var response = await client.PostAsync(url, content);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync();
+        });
     }
 
     private async Task<string> GetAsync(string url)
     {
-        var client = _httpClientFactory.CreateClient("Bitrix");
-        var response = await client.GetAsync(url);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        return await RetryAsync(async () =>
+        {
+            var client = _httpClientFactory.CreateClient("Bitrix");
+            var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync();
+        });
+    }
+
+    private async Task<string> RetryAsync(Func<Task<string>> action, int maxAttempts = 3)
+    {
+        int delayMs = 1000;
+        Exception? lastEx = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                return await action();
+            }
+            catch (HttpRequestException ex) when (attempt < maxAttempts)
+            {
+                lastEx = ex;
+                _logger.LogWarning(ex, "HTTP attempt {Attempt}/{Max} failed, retrying in {Delay}ms",
+                    attempt, maxAttempts, delayMs);
+                await Task.Delay(delayMs);
+                delayMs *= 2;
+            }
+        }
+        throw lastEx!;
     }
 }

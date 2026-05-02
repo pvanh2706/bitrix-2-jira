@@ -61,7 +61,7 @@ public class DbService : IDbService
         }
     }
 
-    public async Task<List<BitrixJiraInfo>> SearchDealAsync(int? dealId, DateTime fromDate, DateTime toDate)
+    public async Task<List<BitrixJiraInfo>> SearchDealAsync(int? dealId, DateTime fromDate, DateTime toDate, int page = 1, int pageSize = 50)
     {
         string fromStr = fromDate.ToString("yyyy/MM/dd");
         string toStr = toDate.ToString("yyyy/MM/dd");
@@ -71,6 +71,9 @@ public class DbService : IDbService
                 (dealId == null || i.Bitrix_DealID == dealId)
                 && string.Compare(i.Bitrix_DateSearch, fromStr) >= 0
                 && string.Compare(i.Bitrix_DateSearch, toStr) <= 0)
+            .OrderByDescending(i => i.LastChangeData)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
     }
 

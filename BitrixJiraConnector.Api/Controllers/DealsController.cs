@@ -37,11 +37,15 @@ public class DealsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<DealSummaryDto>>>> GetDeals(
         [FromQuery] int? dealId,
         [FromQuery] DateTime? fromDate,
-        [FromQuery] DateTime? toDate)
+        [FromQuery] DateTime? toDate,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
     {
+        if (page < 1) page = 1;
+        if (pageSize < 1 || pageSize > 200) pageSize = 50;
         var from = fromDate ?? DateTime.Now.AddDays(-30);
         var to = toDate ?? DateTime.Now;
-        var items = await _dbService.SearchDealAsync(dealId, from, to);
+        var items = await _dbService.SearchDealAsync(dealId, from, to, page, pageSize);
         var dtos = items.Select(i => new DealSummaryDto
         {
             Bitrix_DealID = i.Bitrix_DealID,

@@ -17,12 +17,12 @@
 ## 🟠 HIGH – Nên sửa sớm
 
 - [x] **Hardcoded email domain** `@ezcloud.vn` trong `GetJiraUsernameByEmailAsync` (`JiraService.cs` ~L308) — đã dùng `SystemConfig["email_domain_strip"]` từ DB
-- [ ] **Không có retry logic** cho Bitrix/Jira API (`BitrixService.cs` ~L545) — lỗi mạng thoáng qua là fail ngay, cần exponential backoff
-- [ ] **Không có pagination** trên endpoint `/api/deals` (`DealsController.cs` ~L35) — query 30 ngày deal có thể timeout
-- [ ] **Kiểm tra kích thước file sau khi download** (`JiraService.cs` ~L292) — 10MB check xảy ra sau khi download xong, lãng phí băng thông, cần dùng HEAD request trước
-- [ ] **File download thất bại không xóa file rác** (`BitrixService.cs` ~L430) — tích lũy garbage trên disk
-- [ ] **N+1 API calls khi lấy contacts** (`BitrixService.cs` ~L117) — mỗi contact gọi `GetContactByIdAsync()` riêng, cần batch
-- [ ] **Không xử lý lỗi `PostJiraDataToDealAsync`** (`DealProcessingService.cs` ~L155) — nếu fail, deal bị treo ở trạng thái không nhất quán
+- [x] **Không có retry logic** cho Bitrix/Jira API (`BitrixService.cs` ~L545) — đã thêm `RetryAsync` với exponential backoff (1s→2s→4s, 3 lần) cho cả `GetAsync` và `PostAsync`
+- [x] **Không có pagination** trên endpoint `/api/deals` (`DealsController.cs` ~L35) — đã thêm query params `page` (default 1) và `pageSize` (default 50, max 200); `DbService.SearchDealAsync` dùng `.Skip().Take()` với `OrderByDescending`
+- [x] **Kiểm tra kích thước file sau khi download** (`JiraService.cs` ~L292) — đã dùng HEAD request trước để kiểm tra `Content-Length`; nếu > 10MB thì bỏ qua, không download
+- [x] **File download thất bại không xóa file rác** (`BitrixService.cs` ~L430) — đã thêm `File.Delete(pathFile)` trong catch block của `DownloadFile`
+- [x] **N+1 API calls khi lấy contacts** (`BitrixService.cs` ~L117) — đã thay `GetContactByIdAsync` loop bằng một lần gọi `crm.contact.list` với `filter[ID]` để batch-fetch tất cả contacts cùng lúc
+- [x] **Không xử lý lỗi `PostJiraDataToDealAsync`** (`DealProcessingService.cs` ~L155) — đã thêm kiểm tra DB trước khi `CreateIssueAsync`: nếu `Jira_Link` đã có trong DB (issue đã tạo nhưng write-back thất bại), retry `PostJiraDataToDealAsync` thay vì tạo issue mới
 
 ---
 
