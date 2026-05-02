@@ -237,9 +237,17 @@ public class DealProcessingService : IDealProcessingService
         string subject = ConfigJiraBitrix.MailInfo_Subject_Create_Iss_Error + " - DealID: " + dealId;
         var dbItem = await _dbService.GetDealByDealIdAsync(dealId);
 
+        // Xây dựng nội dung email có đầy đủ context: tên khách sạn, link deal, mô tả lỗi
+        string errorBody = BuildErrorEmailHtml(
+            dealResult.Message,
+            dealResult.DataDeal?.TenKhachSan ?? "",
+            dealResult.DataDeal?.LinkCRM ?? "");
+
         if (dbItem == null)
         {
-            await _emailService.SendEmailAsync(subject, dealResult.Message, dealResult.ToAddressEmail);
+            // Lần đầu tiên phát hiện lỗi — lưu DB TRƯỚC, gửi email SAU.
+            // Thứ tự này quan trọng: nếu DB write thất bại mà email đã gửi,
+            // cycle scan tiếp theo sẽ không biết đã gửi → spam email vô hạn.
             await _dbService.InsertDataAsync(new BitrixJiraInfo
             {
                 Bitrix_DealID = dealId,
@@ -255,36 +263,59 @@ public class DealProcessingService : IDealProcessingService
                 DateTimeSendMailFirst = DateTimeOffset.Now.ToUnixTimeSeconds(),
                 LastChangeData = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
             });
+            await _emailService.SendEmailAsync(subject, errorBody, dealResult.ToAddressEmail);
         }
         else
         {
             var checkResult = CheckResendEmail(dbItem);
             if (!checkResult.IsSendMail) return;
 
+            // Xác định manager nhận email leo thang lần 3 dựa theo loại pipeline:
+            // RENEWAL → Renewal Manager; SALE / CROSS_SALE → Sales Manager
             string pipeline = dealResult.DataDeal?.Pipeline ?? "";
             bool isRenewal = pipeline == ((int)TYPE_PIPE_LINE.RENEWAL).ToString();
-            string managerEmail = isRenewal
-                ? (await GetEmailSettingAsync("email_renewal_manager"))
-                : (await GetEmailSettingAsync("email_sales_manager"));
+            string managerConfigKey = isRenewal ? "email_renewal_manager" : "email_sales_manager";
+            string managerEmail = await GetEmailSettingAsync(managerConfigKey);
+
+            if (string.IsNullOrEmpty(managerEmail))
+                _logger.LogWarning(
+                    "Config key '{Key}' chưa được cấu hình — email leo thang lần 3 sẽ dùng fallback email",
+                    managerConfigKey);
 
             bool isThird = checkResult.SaveTimeSendMailTo == (int)SAVE_TIME_SEND_MAIL_TO.TIME_SEND_MAIL_THIRD;
             string toEmail = isThird ? managerEmail : dealResult.ToAddressEmail;
 
-            await _emailService.SendEmailAsync(subject, dealResult.Message, toEmail);
+            // Lần 3 leo thang lên manager: CC người phụ trách để họ biết đã bị báo cáo
+            string? ccEmail = isThird ? dealResult.ToAddressEmail : null;
+
+            // Lưu timestamp vào DB TRƯỚC khi gửi email — cùng lý do như lần 1:
+            // đảm bảo không gửi lại nếu DB write thất bại sau khi email đã đi.
             await _dbService.UpdateDateTimeSendMailAsync(dealId, checkResult.SaveTimeSendMailTo);
+            await _emailService.SendEmailAsync(subject, errorBody, toEmail, ccAddress: ccEmail);
         }
     }
 
+    // Kiểm tra xem có nên gửi email leo thang tiếp theo không, và gửi lần mấy.
+    // Logic leo thang 3 lần:
+    //   Lần 1 → ngay khi phát hiện lỗi (được xử lý ở nhánh dbItem == null)
+    //   Lần 2 → sau 17h cùng ngày (nếu lần 1 gửi trước 17h) HOẶC 9h sáng hôm sau
+    //   Lần 3 → 9h sáng ngày sau lần 2, leo thang lên manager
+    // Trả về IsSendMail = false nếu chưa đến thời hạn hoặc đã gửi đủ 3 lần.
     private static CheckSendEmailResult CheckResendEmail(BitrixJiraInfo info)
     {
         var result = new CheckSendEmailResult { IsSendMail = false, SaveTimeSendMailTo = (int)SAVE_TIME_SEND_MAIL_TO.NO_SAVE };
 
+        // Chưa gửi lần nào → gửi lần 1 ngay lập tức
+        // (trường hợp này thực tế không xảy ra vì được xử lý ở nhánh dbItem == null,
+        // nhưng giữ lại để đảm bảo an toàn nếu có inconsistency trong DB)
         if (info.DateTimeSendMailFirst == null)
         {
             result.IsSendMail = true;
             result.SaveTimeSendMailTo = (int)SAVE_TIME_SEND_MAIL_TO.TIME_SEND_MAIL_FIRST;
             return result;
         }
+
+        // Đã gửi đủ 3 lần → dừng hẳn, không gửi thêm
         if (info.DateTimeSendMailThird != null) return result;
 
         DateTime firstSent = DateTimeOffset.FromUnixTimeSeconds(info.DateTimeSendMailFirst ?? 0).LocalDateTime;
@@ -292,6 +323,9 @@ public class DealProcessingService : IDealProcessingService
         DateTime now = DateTime.Now;
         DateTime nextDay9am = firstSent.AddDays(1).Date.AddHours(9);
 
+        // Điều kiện gửi lần 2:
+        // - Lần 1 gửi trước 17h và bây giờ đã qua 17h cùng ngày, HOẶC
+        // - Lần 1 gửi sau 17h (ngoài giờ làm việc) và bây giờ đã qua 9h sáng hôm sau
         bool shouldSendSecond = (firstSent < at17h && now > at17h) || (firstSent >= at17h && now > nextDay9am);
         if (info.DateTimeSendMailSecond == null && shouldSendSecond)
         {
@@ -300,6 +334,7 @@ public class DealProcessingService : IDealProcessingService
             return result;
         }
 
+        // Điều kiện gửi lần 3: đã gửi lần 2 và bây giờ đã qua 9h sáng ngày hôm sau lần 2
         if (info.DateTimeSendMailSecond != null && info.DateTimeSendMailThird == null)
         {
             DateTime secondSent = DateTimeOffset.FromUnixTimeSeconds(info.DateTimeSendMailSecond ?? 0).LocalDateTime;
@@ -328,4 +363,19 @@ public class DealProcessingService : IDealProcessingService
         $"<html><body><p>Issue đã được tạo thành công từ Bitrix</p>" +
         $"<p>Link Deal: <a href='{dealUrl}'>{dealUrl}</a></p>" +
         $"<p>Link Issue: <a href='{issueUrl}'>{issueUrl}</a></p></body></html>";
+
+    // Xây dựng nội dung email báo lỗi với đầy đủ context deal,
+    // giúp người nhận biết ngay deal nào bị lỗi mà không cần tra thêm.
+    private static string BuildErrorEmailHtml(string errorMessage, string tenKhachSan, string dealUrl)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<html><body>");
+        if (!string.IsNullOrEmpty(tenKhachSan))
+            sb.Append($"<p><strong>Khách sạn:</strong> {tenKhachSan}</p>");
+        if (!string.IsNullOrEmpty(dealUrl))
+            sb.Append($"<p><strong>Link Deal:</strong> <a href='{dealUrl}'>{dealUrl}</a></p>");
+        sb.Append($"<p>{errorMessage}</p>");
+        sb.Append("</body></html>");
+        return sb.ToString();
+    }
 }

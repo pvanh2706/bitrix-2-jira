@@ -15,7 +15,7 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task SendEmailAsync(string subject, string body, string toAddress, bool includeBitrixJiraAdmins = false)
+    public async Task SendEmailAsync(string subject, string body, string toAddress, bool includeBitrixJiraAdmins = false, string? ccAddress = null)
     {
         var all = (await _dbService.GetAllSystemConfigsAsync())
                   .GroupBy(c => c.ConfigKey)
@@ -24,6 +24,8 @@ public class EmailService : IEmailService
         string fromAddr = all.GetValueOrDefault("email_from_address", "");
         string fromName = all.GetValueOrDefault("email_from_name", "");
         string fallback = all.GetValueOrDefault("email_fallback_to", "");
+
+        // Nếu toAddress rỗng (chưa cấu hình email người phụ trách), dùng fallback để không bỏ sót
         string effectiveTo = string.IsNullOrEmpty(toAddress) ? fallback : toAddress;
         try
         {
@@ -31,7 +33,14 @@ public class EmailService : IEmailService
             var from = new EmailAddress(fromAddr, fromName);
             var to = new EmailAddress(effectiveTo);
             var msg = MailHelper.CreateSingleEmail(from, to, subject, body, body);
+
+            // Luôn CC fallback (thường là admin) để không bỏ sót bất kỳ email nào
             msg.AddCc(new EmailAddress(fallback));
+
+            // CC thêm địa chỉ cụ thể — dùng khi leo thang lần 3 (CC người phụ trách để họ biết)
+            if (!string.IsNullOrEmpty(ccAddress) && ccAddress != effectiveTo && ccAddress != fallback)
+                msg.AddCc(new EmailAddress(ccAddress));
+
             if (includeBitrixJiraAdmins)
             {
                 msg.AddCc(new EmailAddress(all.GetValueOrDefault("email_admin_bitrix", "")));
