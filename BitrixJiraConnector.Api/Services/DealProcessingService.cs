@@ -265,6 +265,21 @@ public class DealProcessingService : IDealProcessingService
             });
             await _emailService.SendEmailAsync(subject, errorBody, dealResult.ToAddressEmail);
         }
+        else if (dbItem.ErrorInfo != dealResult.Message)
+        {
+            // Lỗi đã THAY ĐỔI so với lần trước (vd: user sửa deal nhưng phát sinh lỗi mới).
+            // Reset toàn bộ lịch sử gửi mail và gửi ngay lập tức, không chờ khung giờ leo thang.
+            // Lý do: người dùng đã cố sửa → cần được thông báo ngay về lỗi mới,
+            // không để chờ đến 17h hay 9h sáng hôm sau.
+            _logger.LogInformation(
+                "Deal {DealId}: lỗi thay đổi từ [{OldError}] → [{NewError}] — reset lịch sử mail, gửi ngay",
+                dealId,
+                dbItem.ErrorInfo?.Length > 80 ? dbItem.ErrorInfo[..80] + "..." : dbItem.ErrorInfo,
+                dealResult.Message?.Length > 80 ? dealResult.Message[..80] + "..." : dealResult.Message);
+            await _dbService.ResetErrorMailTimestampsAsync(dealId, dealResult.Message ?? "");
+            await _dbService.UpdateDateTimeSendMailAsync(dealId, (int)SAVE_TIME_SEND_MAIL_TO.TIME_SEND_MAIL_FIRST);
+            await _emailService.SendEmailAsync(subject, errorBody, dealResult.ToAddressEmail);
+        }
         else
         {
             var checkResult = CheckResendEmail(dbItem);

@@ -61,6 +61,21 @@ public class DbService : IDbService
         }
     }
 
+    public async Task ResetErrorMailTimestampsAsync(int dealId, string newErrorInfo)
+    {
+        var item = await _db.BitrixJiraInfoes.FirstOrDefaultAsync(i => i.Bitrix_DealID == dealId);
+        if (item != null)
+        {
+            // Xóa toàn bộ lịch sử gửi mail để hệ thống coi đây là lỗi hoàn toàn mới
+            item.DateTimeSendMailFirst = null;
+            item.DateTimeSendMailSecond = null;
+            item.DateTimeSendMailThird = null;
+            item.ErrorInfo = newErrorInfo;
+            item.LastChangeData = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            await _db.SaveChangesAsync();
+        }
+    }
+
     public async Task<List<BitrixJiraInfo>> SearchDealAsync(int? dealId, DateTime fromDate, DateTime toDate, int page = 1, int pageSize = 50)
     {
         string fromStr = fromDate.ToString("yyyy/MM/dd");
