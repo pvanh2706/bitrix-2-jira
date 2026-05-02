@@ -3,7 +3,6 @@ using BitrixJiraConnector.Api.Configurations;
 using BitrixJiraConnector.Api.Helpers;
 using BitrixJiraConnector.Api.Models.Bitrix;
 using BitrixJiraConnector.Api.Services.Interfaces;
-using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -12,29 +11,58 @@ namespace BitrixJiraConnector.Api.Services;
 public class BitrixService : IBitrixService
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly BitrixSettings _bitrixSettings;
-    private readonly JiraSettings _jiraSettings;
+    private readonly IDbService _dbService;
     private readonly ILogger<BitrixService> _logger;
+
+    private BitrixSettings _bitrixSettings = null!;
+    private JiraSettings _jiraSettings = null!;
+
+    private async Task EnsureConfigLoadedAsync()
+    {
+        if (_bitrixSettings is not null) return;
+        var all = (await _dbService.GetAllSystemConfigsAsync())
+                  .GroupBy(c => c.ConfigKey)
+                  .ToDictionary(g => g.Key, g => g.First().ConfigValue);
+        _bitrixSettings = new BitrixSettings
+        {
+            ApiUrl         = all.GetValueOrDefault("bitrix_api_url", ""),
+            BaseUrl        = all.GetValueOrDefault("bitrix_base_url", ""),
+            DealDetailUrl  = all.GetValueOrDefault("bitrix_deal_detail_url", ""),
+            User           = all.GetValueOrDefault("bitrix_user", ""),
+            Password       = all.GetValueOrDefault("bitrix_password", ""),
+            AttachFilePath = all.GetValueOrDefault("bitrix_attach_file_path", ""),
+        };
+        _jiraSettings = new JiraSettings
+        {
+            Url      = all.GetValueOrDefault("jira_url", ""),
+            User     = all.GetValueOrDefault("jira_user", ""),
+            Password = all.GetValueOrDefault("jira_password", ""),
+        };
+    }
 
     public BitrixService(
         IHttpClientFactory httpClientFactory,
-        IOptions<BitrixSettings> bitrixSettings,
-        IOptions<JiraSettings> jiraSettings,
+        IDbService dbService,
         ILogger<BitrixService> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _bitrixSettings = bitrixSettings.Value;
-        _jiraSettings = jiraSettings.Value;
+        _dbService = dbService;
         _logger = logger;
     }
 
     public async Task<List<int>> GetDealIdsToProcessAsync()
     {
+        await EnsureConfigLoadedAsync();
         string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_LIST_DEAL_DATA;
+        string cutoff = DateTime.Now.AddMinutes(-3).ToString("yyyy-MM-ddTHH:mm:ss");
         var data = new
         {
             order = new Dictionary<string, object> { ["CLOSEDATE"] = "DESC" },
-            filter = new Dictionary<string, object> { ["STAGE_SEMANTIC_ID"] = new[] { "S", "F" } },
+            filter = new Dictionary<string, object>
+            {
+                ["STAGE_SEMANTIC_ID"] = new[] { "S", "F" },
+                [">=DATE_MODIFY"] = cutoff,
+            },
         };
 
         string responseBody = await PostAsync(url, data);
@@ -52,6 +80,7 @@ public class BitrixService : IBitrixService
 
     public async Task<JObject> GetCustomFieldsAsync()
     {
+        await EnsureConfigLoadedAsync();
         string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_DEAL_FIELD;
         string response = await GetAsync(url);
         return JObject.Parse(response);
@@ -59,6 +88,7 @@ public class BitrixService : IBitrixService
 
     public async Task<JObject> GetProductListAsync()
     {
+        await EnsureConfigLoadedAsync();
         string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_LIST_PRODUCT_DATA;
         string response = await GetAsync(url);
         return JObject.Parse(response);
@@ -66,6 +96,7 @@ public class BitrixService : IBitrixService
 
     public async Task<JObject> GetProductByIdAsync(string productId)
     {
+        await EnsureConfigLoadedAsync();
         string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_PRODUCT_BY_ID_DATA + productId;
         string response = await GetAsync(url);
         return JObject.Parse(response);
@@ -73,6 +104,7 @@ public class BitrixService : IBitrixService
 
     public async Task<JObject> GetProductSectionListAsync()
     {
+        await EnsureConfigLoadedAsync();
         string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_LIST_SECTION_DATA;
         string response = await GetAsync(url);
         return JObject.Parse(response);
@@ -80,6 +112,7 @@ public class BitrixService : IBitrixService
 
     public async Task<BitrixDataDealApiResult> GetDealByIdAsync(int dealId, JObject customFields)
     {
+        await EnsureConfigLoadedAsync();
         string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_DEAL_DATA + dealId;
         string response = await GetAsync(url);
         dynamic responseConvert = JsonConvert.DeserializeObject<dynamic>(response)!;
@@ -89,6 +122,7 @@ public class BitrixService : IBitrixService
 
     public async Task<UserBitrix> GetResponsibleUserByIdAsync(string userId)
     {
+        await EnsureConfigLoadedAsync();
         var user = new UserBitrix();
         string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_USER_DATA + userId;
         string response = await GetAsync(url);
@@ -106,6 +140,7 @@ public class BitrixService : IBitrixService
 
     public async Task<ContactBitrix> GetContactLienHeKhiTrienKhaiAsync(string dealId)
     {
+        await EnsureConfigLoadedAsync();
         var contact = new ContactBitrix();
         string url = _bitrixSettings.ApiUrl + ApiBitrixConstants.API_GET_LIST_CONTACT_OF_DEAL + dealId;
         string response = await GetAsync(url);
@@ -192,6 +227,7 @@ public class BitrixService : IBitrixService
 
     public async Task PostJiraDataToDealAsync(BitrixDataDeal deal, string jiraKey)
     {
+        await EnsureConfigLoadedAsync();
         string url = _bitrixSettings.ApiUrl + "/crm.deal.update";
         string jiraUrl = _jiraSettings.Url + "/browse/" + jiraKey;
         var data = new
@@ -254,30 +290,11 @@ public class BitrixService : IBitrixService
 
         List<string> missingFields = new();
         bool dealNotNeedCreateIss = false;
-        switch (deal.LoaiDeal)
-        {
-            case ConfigJiraBitrix.LoaiDeal_TrienKhaiMoi:
-                missingFields = CheckRequireFieldBitrix.GetKeysWithNullOrEmptyValues(dataDealApi, ConfigJiraBitrix.FieldRequire_TrienKhaiMoi);
-                break;
-            case ConfigJiraBitrix.LoaiDeal_TrienKhaiBoSung:
-                missingFields = CheckRequireFieldBitrix.GetKeysWithNullOrEmptyValues(dataDealApi, ConfigJiraBitrix.FieldRequire_TrienKhaiBoSung);
-                break;
-            case ConfigJiraBitrix.LoaiDeal_NgungHuyDichVu:
-                missingFields = CheckRequireFieldBitrix.GetKeysWithNullOrEmptyValues(dataDealApi, ConfigJiraBitrix.FieldRequire_NgungHuyDichVu);
-                break;
-            case ConfigJiraBitrix.LoaiDeal_ChuyenDoiDichVu:
-                missingFields = CheckRequireFieldBitrix.GetKeysWithNullOrEmptyValues(dataDealApi, ConfigJiraBitrix.FieldRequire_ChuyenDoiDichVu);
-                break;
-            case ConfigJiraBitrix.LoaiDeal_CapKey:
-                missingFields = CheckRequireFieldBitrix.GetKeysWithNullOrEmptyValues(dataDealApi, ConfigJiraBitrix.FieldRequire_CapKey);
-                break;
-            case ConfigJiraBitrix.LoaiDeal_HoTroKhac:
-                missingFields = CheckRequireFieldBitrix.GetKeysWithNullOrEmptyValues(dataDealApi, ConfigJiraBitrix.FieldRequire_HoTroKhac);
-                break;
-            default:
-                dealNotNeedCreateIss = true;
-                break;
-        }
+        var requiredFields = await _dbService.GetRequiredFieldsAsync(deal.LoaiDeal);
+        if (requiredFields.Count > 0)
+            missingFields = CheckRequireFieldBitrix.GetKeysWithNullOrEmptyValues(dataDealApi, requiredFields);
+        else
+            dealNotNeedCreateIss = true;
 
         deal.Responsible_UserID = dataDealApi.ASSIGNED_BY_ID ?? "";
         var user = await GetResponsibleUserByIdAsync(deal.Responsible_UserID);
@@ -306,7 +323,8 @@ public class BitrixService : IBitrixService
 
         if (missingFields.Any())
         {
-            var fieldNames = CheckRequireFieldBitrix.GetValuesForKeys(ConfigJiraBitrix.KeyValueField_Bitrix, missingFields);
+            var fieldLabels = await _dbService.GetAllFieldLabelsAsync();
+            var fieldNames = CheckRequireFieldBitrix.GetValuesForKeys(fieldLabels, missingFields);
             string fields = string.Join(", ", fieldNames);
             result.Message = BuildErrorHtml($"Không tạo được iss do không nhập trường bắt buộc: {fields}", urlDeal);
             result.HaveError = true;

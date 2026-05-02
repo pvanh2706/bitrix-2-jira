@@ -10,6 +10,10 @@ export const dealsApi = {
     return client.get<ApiResponse<DealSummaryDto>>(`/deals/${dealId}`)
   },
 
+  isProcessing(dealId: number) {
+    return client.get<ApiResponse<boolean>>(`/deals/${dealId}/is-processing`)
+  },
+
   process(dealId: number, signal?: AbortSignal) {
     return client.post<ApiResponse<ProcessDealResult>>(
       `/deals/${dealId}/process`,

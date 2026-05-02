@@ -4,24 +4,36 @@ using BitrixJiraConnector.Api.Configurations;
 using BitrixJiraConnector.Api.Models.Bitrix;
 using BitrixJiraConnector.Api.Models.Database;
 using BitrixJiraConnector.Api.Services.Interfaces;
-using Microsoft.Extensions.Options;
 
 namespace BitrixJiraConnector.Api.Services;
 
 public class JiraService : IJiraService
 {
-    private readonly JiraSettings _jiraSettings;
     private readonly IDbService _dbService;
     private readonly IEmailService _emailService;
     private readonly ILogger<JiraService> _logger;
 
+    private JiraSettings _jiraSettings = null!;
+
+    private async Task EnsureConfigLoadedAsync()
+    {
+        if (_jiraSettings is not null) return;
+        var all = (await _dbService.GetAllSystemConfigsAsync())
+                  .GroupBy(c => c.ConfigKey)
+                  .ToDictionary(g => g.Key, g => g.First().ConfigValue);
+        _jiraSettings = new JiraSettings
+        {
+            Url      = all.GetValueOrDefault("jira_url", ""),
+            User     = all.GetValueOrDefault("jira_user", ""),
+            Password = all.GetValueOrDefault("jira_password", ""),
+        };
+    }
+
     public JiraService(
-        IOptions<JiraSettings> jiraSettings,
         IDbService dbService,
         IEmailService emailService,
         ILogger<JiraService> logger)
     {
-        _jiraSettings = jiraSettings.Value;
         _dbService = dbService;
         _emailService = emailService;
         _logger = logger;
@@ -29,6 +41,7 @@ public class JiraService : IJiraService
 
     public async Task<Issue?> CreateIssueAsync(BitrixDataDeal deal)
     {
+        await EnsureConfigLoadedAsync();
         try
         {
             return deal.LoaiDeal switch
@@ -58,7 +71,7 @@ public class JiraService : IJiraService
         string reporter = await GetJiraUsernameByEmailAsync(jira, deal.Responsible_Email);
         issue.Reporter = reporter;
         issue["Người yêu cầu"] = deal.Responsible_FirstName + " " + deal.Responsible_LastName;
-        issue["Team bán hàng"] = GetTeamByCategoryId(deal.Pipeline);
+        issue["Team bán hàng"] = await GetTeamByCategoryIdAsync(deal.Pipeline);
         issue["Market"] = deal.ThiTruong;
         issue["Phân khúc KH"] = deal.LoaiHinhKhachSan;
         issue["Khách hàng mới hay cũ"] = deal.Source == "9" ? "Cũ" : "Mới";
@@ -102,7 +115,7 @@ public class JiraService : IJiraService
         issue.Summary = $"{deal.YeuCauThem} -  {deal.TenKhachSan}";
         string reporter = await GetJiraUsernameByEmailAsync(jira, deal.Responsible_Email);
         issue.Reporter = reporter;
-        issue["Team bán hàng"] = GetTeamByCategoryId(deal.Pipeline);
+        issue["Team bán hàng"] = await GetTeamByCategoryIdAsync(deal.Pipeline);
         issue["Người yêu cầu"] = deal.Responsible_FirstName + " " + deal.Responsible_LastName;
         issue["Market"] = deal.ThiTruong;
         issue["Mã khách hàng (company ID)"] = deal.CompanyId;
@@ -147,7 +160,7 @@ public class JiraService : IJiraService
         issue.Summary = $"Ngừng/Hủy dịch vụ - {deal.TenKhachSan}";
         string reporter = await GetJiraUsernameByEmailAsync(jira, deal.Responsible_Email);
         issue.Reporter = reporter;
-        issue["Team bán hàng"] = GetTeamByCategoryId(deal.Pipeline);
+        issue["Team bán hàng"] = await GetTeamByCategoryIdAsync(deal.Pipeline);
         issue["Mã khách hàng (company ID)"] = deal.CompanyId;
         issue["Mã hợp đồng (deal ID)"] = deal.DealID;
         issue["Link CRM"] = deal.LinkCRM;
@@ -185,7 +198,7 @@ public class JiraService : IJiraService
         string reporter = await GetJiraUsernameByEmailAsync(jira, deal.Responsible_Email);
         issue.Reporter = reporter;
         issue["Người yêu cầu"] = deal.Responsible_FirstName + " " + deal.Responsible_LastName;
-        issue["Team bán hàng"] = GetTeamByCategoryId(deal.Pipeline);
+        issue["Team bán hàng"] = await GetTeamByCategoryIdAsync(deal.Pipeline);
         issue["Market"] = deal.ThiTruong;
         issue["Phân khúc KH"] = deal.LoaiHinhKhachSan;
         issue["Mã khách hàng (company ID)"] = deal.CompanyId;
@@ -304,9 +317,9 @@ public class JiraService : IJiraService
     {
         try
         {
-            string username = email.Replace("@ezcloud.vn", "");
-            if (email == "dung.nguyen@ezcloud.vn") username = "dungnn";
-            if (email == "duong.nguyen@ezcloud.vn") username = "duongnh";
+            var mapped = await _dbService.GetJiraUsernameForEmailAsync(email);
+            string domainStrip = await _dbService.GetSystemConfigAsync("email_domain_strip") ?? "@ezcloud.vn";
+            string username = mapped ?? email.Replace(domainStrip, "");
             var user = await jira.Users.GetUserAsync(username);
             if (user != null && user.Username.Length > 0) return user.Username;
         }
@@ -325,6 +338,11 @@ public class JiraService : IJiraService
         "6" => "Project Sale",
         _ => "Sales"
     };
+
+    private async Task<string> GetTeamByCategoryIdAsync(string categoryId)
+    {
+        return await _dbService.GetPipelineNameAsync(categoryId) ?? GetTeamByCategoryId(categoryId);
+    }
 
     private static string BuildDiaChiKhachSan(BitrixDataDeal deal)
         => $"{deal.DC_Khach_SoNhaDuong}, {deal.DC_Khach_PhuongXa}, {deal.DC_Khach_QuanHuyen}, {deal.DC_Khach_TinhThanhPho}";

@@ -10,11 +10,13 @@ public class DealsController : ControllerBase
 {
     private readonly IDbService _dbService;
     private readonly IDealProcessingService _processingService;
+    private readonly IDealLockService _lockService;
 
-    public DealsController(IDbService dbService, IDealProcessingService processingService)
+    public DealsController(IDbService dbService, IDealProcessingService processingService, IDealLockService lockService)
     {
         _dbService = dbService;
         _processingService = processingService;
+        _lockService = lockService;
     }
 
     [HttpPost("{dealId}/process")]
@@ -22,6 +24,13 @@ public class DealsController : ControllerBase
     {
         var result = await _processingService.ProcessSingleDealAsync(dealId, token);
         return Ok(ApiResponse<ProcessDealResult>.Ok(result));
+    }
+
+    [HttpGet("{dealId}/is-processing")]
+    public ActionResult<ApiResponse<bool>> IsDealProcessing(int dealId)
+    {
+        bool processing = _lockService.IsProcessing(dealId);
+        return Ok(ApiResponse<bool>.Ok(processing));
     }
 
     [HttpGet]

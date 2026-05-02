@@ -106,4 +106,51 @@ public class DbService : IDbService
         if (item != null && int.TryParse(item.ValueConfig, out int val)) return val;
         return 5;
     }
+
+    public async Task<List<string>> GetRequiredFieldsAsync(string dealTypeId)
+    {
+        return await _db.DealTypeRequiredFields
+            .Where(f => f.DealTypeId == dealTypeId)
+            .Select(f => f.FieldKey)
+            .ToListAsync();
+    }
+
+    public async Task<Dictionary<string, string>> GetAllFieldLabelsAsync()
+    {
+        return await _db.BitrixFieldMappings
+            .ToDictionaryAsync(f => f.FieldKey, f => f.FieldLabel);
+    }
+
+    public async Task<string?> GetJiraUsernameForEmailAsync(string email)
+    {
+        var item = await _db.UserEmailMappings.FirstOrDefaultAsync(u => u.Email == email);
+        return item?.JiraUsername;
+    }
+
+    public async Task<string?> GetPipelineNameAsync(string categoryId)
+    {
+        var item = await _db.PipelineMappings.FirstOrDefaultAsync(p => p.CategoryId == categoryId);
+        return item?.PipelineName;
+    }
+
+    public async Task<string?> GetSystemConfigAsync(string key)
+    {
+        var item = await _db.SystemConfigs.FirstOrDefaultAsync(c => c.ConfigKey == key);
+        return item?.ConfigValue;
+    }
+
+    public async Task<List<SystemConfig>> GetAllSystemConfigsAsync()
+    {
+        // GroupBy ConfigKey để loại bỏ duplicate nếu migration seed trùng
+        var all = await _db.SystemConfigs.OrderBy(c => c.ConfigKey).ToListAsync();
+        return all.GroupBy(c => c.ConfigKey).Select(g => g.First()).ToList();
+    }
+
+    public async Task UpdateSystemConfigAsync(string key, string value)
+    {
+        var item = await _db.SystemConfigs.FirstOrDefaultAsync(c => c.ConfigKey == key);
+        if (item == null) return;
+        item.ConfigValue = value;
+        await _db.SaveChangesAsync();
+    }
 }

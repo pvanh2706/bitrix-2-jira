@@ -68,6 +68,7 @@ Controllers/
 Helpers/
  BitrixConvertData.cs
  CheckRequireFieldBitrix.cs
+Middleware/ApiKeyMiddleware.cs
 Migrations/
  20240618083630_AddTable_BitrixJiraInfo.cs
  20240618083630_AddTable_BitrixJiraInfo.Designer.cs
@@ -79,6 +80,14 @@ Migrations/
  20240704045636_EditFieldTableBitrixJiraInfo.Designer.cs
  20240704065516_EditTypeFieldTable_BitrixJiraInfo.cs
  20240704065516_EditTypeFieldTable_BitrixJiraInfo.Designer.cs
+ 20260501000000_AddConfigTables.cs
+ 20260501000000_AddConfigTables.Designer.cs
+ 20260501000001_SeedSystemConfigUrls.cs
+ 20260501000001_SeedSystemConfigUrls.Designer.cs
+ 20260501000002_SeedConfigData.cs
+ 20260501000002_SeedConfigData.Designer.cs
+ 20260501000003_SeedCredentials.cs
+ 20260501000003_SeedCredentials.Designer.cs
  AppDbContextModelSnapshot.cs
 Models/Bitrix/
  BitrixDataDeal.cs
@@ -90,9 +99,15 @@ Models/Bitrix/
 Models/Database/
  AppDbContext.cs
  AppDbContextFactory.cs
+ BitrixFieldMapping.cs
  BitrixJiraInfo.cs
  ConfigData.cs
+ DealTypeConfig.cs
+ DealTypeRequiredField.cs
  ExceptionLog.cs
+ PipelineMapping.cs
+ SystemConfig.cs
+ UserEmailMapping.cs
 Models/Dto/
  ApiResponse.cs
  CheckSendEmail.cs
@@ -110,6 +125,7 @@ Services/
  DbService.cs
  DealLockService.cs
  DealProcessingService.cs
+ DryRunJiraService.cs
  EmailService.cs
  Interfaces/
   IBitrixService.cs
@@ -121,7 +137,7 @@ Services/
  JiraService.cs
 
 [metadataReferences]
-<DOTNET>/packs/Microsoft.AspNetCore.App.Ref/10.0.6/ref/net10.0/
+<DOTNET>/packs/Microsoft.AspNetCore.App.Ref/10.0.5/ref/net10.0/
  Microsoft.AspNetCore.Antiforgery.dll
  Microsoft.AspNetCore.Authentication.Abstractions.dll
  Microsoft.AspNetCore.Authentication.BearerToken.dll
@@ -262,7 +278,7 @@ Services/
  System.Formats.Cbor.dll
  System.Security.Cryptography.Xml.dll
  System.Threading.RateLimiting.dll
-<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.6/ref/net10.0/
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.5/ref/net10.0/
  Microsoft.CSharp.dll
  Microsoft.VisualBasic.Core.dll
  Microsoft.VisualBasic.dll
@@ -451,7 +467,7 @@ Services/
  system.serviceprocess.servicecontroller/9.0.5/lib/net9.0/System.ServiceProcess.ServiceController.dll
 
 [analyzerReferences]
-<DOTNET>/packs/Microsoft.AspNetCore.App.Ref/10.0.6/analyzers/dotnet/cs/
+<DOTNET>/packs/Microsoft.AspNetCore.App.Ref/10.0.5/analyzers/dotnet/cs/
  Microsoft.AspNetCore.App.Analyzers.dll
  Microsoft.AspNetCore.App.CodeFixes.dll
  Microsoft.AspNetCore.App.SourceGenerators.dll
@@ -459,21 +475,21 @@ Services/
  Microsoft.Extensions.Logging.Generators.dll
  Microsoft.Extensions.Options.SourceGeneration.dll
  Microsoft.Extensions.Validation.ValidationsGenerator.dll
-<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.6/analyzers/dotnet/cs/
+<DOTNET>/packs/Microsoft.NETCore.App.Ref/10.0.5/analyzers/dotnet/cs/
  Microsoft.Interop.ComInterfaceGenerator.dll
  Microsoft.Interop.JavaScript.JSImportGenerator.dll
  Microsoft.Interop.LibraryImportGenerator.dll
  Microsoft.Interop.SourceGeneration.dll
  System.Text.Json.SourceGeneration.dll
  System.Text.RegularExpressions.Generator.dll
-<DOTNET>/sdk/10.0.202/Sdks/Microsoft.NET.Sdk.Razor/source-generators/
+<DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk.Razor/source-generators/
  Microsoft.AspNetCore.Razor.Utilities.Shared.dll
  Microsoft.CodeAnalysis.Razor.Compiler.dll
  Microsoft.Extensions.ObjectPool.dll
-<DOTNET>/sdk/10.0.202/Sdks/Microsoft.NET.Sdk.Web/analyzers/cs/
+<DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk.Web/analyzers/cs/
  Microsoft.AspNetCore.Analyzers.dll
  Microsoft.AspNetCore.Mvc.Analyzers.dll
-<DOTNET>/sdk/10.0.202/Sdks/Microsoft.NET.Sdk/analyzers/
+<DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk/analyzers/
  Microsoft.CodeAnalysis.CSharp.NetAnalyzers.dll
  Microsoft.CodeAnalysis.NetAnalyzers.dll
 <NUGET>/
@@ -484,5 +500,5 @@ Services/
  microsoft.entityframeworkcore.analyzers/9.0.5/analyzers/dotnet/cs/Microsoft.EntityFrameworkCore.Analyzers.dll
 
 [analyzerConfigFiles]
-<DOTNET>/sdk/10.0.202/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_10_default.globalconfig
+<DOTNET>/sdk/10.0.201/Sdks/Microsoft.NET.Sdk/analyzers/build/config/analysislevel_10_default.globalconfig
 obj/Debug/net10.0/BitrixJiraConnector.Api.GeneratedMSBuildEditorConfig.editorconfig

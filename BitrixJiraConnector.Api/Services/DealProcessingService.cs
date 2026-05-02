@@ -3,6 +3,7 @@ using BitrixJiraConnector.Api.Models.Bitrix;
 using BitrixJiraConnector.Api.Models.Database;
 using BitrixJiraConnector.Api.Models.Dto;
 using BitrixJiraConnector.Api.Services.Interfaces;
+using Microsoft.Extensions.Options;
 using CheckSendEmailResult = BitrixJiraConnector.Api.Models.Dto.CheckSendEmailResult;
 
 namespace BitrixJiraConnector.Api.Services;
@@ -15,6 +16,7 @@ public class DealProcessingService : IDealProcessingService
     private readonly IEmailService _emailService;
     private readonly IDealLockService _lockService;
     private readonly ILogger<DealProcessingService> _logger;
+    private readonly ScanningSettings _scanningSettings;
 
     public DealProcessingService(
         IBitrixService bitrixService,
@@ -22,7 +24,8 @@ public class DealProcessingService : IDealProcessingService
         IDbService dbService,
         IEmailService emailService,
         IDealLockService lockService,
-        ILogger<DealProcessingService> logger)
+        ILogger<DealProcessingService> logger,
+        IOptions<ScanningSettings> scanningSettings)
     {
         _bitrixService = bitrixService;
         _jiraService = jiraService;
@@ -30,6 +33,7 @@ public class DealProcessingService : IDealProcessingService
         _emailService = emailService;
         _lockService = lockService;
         _logger = logger;
+        _scanningSettings = scanningSettings.Value;
     }
 
     public async Task ScanAndProcessAllDealsAsync(CancellationToken token)
@@ -38,6 +42,15 @@ public class DealProcessingService : IDealProcessingService
         try
         {
             var dealIds = await _bitrixService.GetDealIdsToProcessAsync();
+
+            // if (_scanningSettings.DryRun)
+            // {
+            //     _logger.LogInformation("[DRY RUN] Tìm thấy {Count} deal: [{Ids}]",
+            //         dealIds.Count,
+            //         string.Join(", ", dealIds));
+            //     return;
+            // }
+
             foreach (int dealId in dealIds)
             {
                 token.ThrowIfCancellationRequested();
@@ -64,18 +77,18 @@ public class DealProcessingService : IDealProcessingService
 
     public async Task<ProcessDealResult> ProcessSingleDealAsync(int dealId, CancellationToken token)
     {
-        var sem = _lockService.GetLock(dealId);
-        bool acquired = await sem.WaitAsync(TimeSpan.FromSeconds(30), token);
+        var sem = _lockService.GetLock(dealId); // Lấy Semaphore riêng cho dealId
+        bool acquired = await sem.WaitAsync(TimeSpan.FromSeconds(30), token); // Timeout để tránh deadlock nếu có vấn đề với Semaphore
         if (!acquired)
             return new ProcessDealResult { Success = false, Message = "Timeout waiting for deal lock" };
 
         try
         {
-            return await ProcessDealInternalAsync(dealId);
+            return await ProcessDealInternalAsync(dealId); // Thực hiện xử lý deal trong phương thức riêng để đảm bảo Semaphore được giải phóng đúng cách
         }
         finally
         {
-            sem.Release();
+            sem.Release(); // Đảm bảo giải phóng Semaphore dù có lỗi hay không, tránh tình trạng deadlock
         }
     }
 
@@ -86,8 +99,27 @@ public class DealProcessingService : IDealProcessingService
         var customFields = await _bitrixService.GetCustomFieldsAsync();
         var dealResult = await _bitrixService.GetDealByIdAsync(dealId, customFields);
 
+        if (_scanningSettings.DryRun)
+        {
+            _logger.LogInformation(
+                "[DRY RUN] Deal {DealId} | LoaiDeal: {LoaiDeal} | TenKhachSan: {TenKhachSan} | HaveError: {HaveError} | HaveCreateIssues: {HaveCreateIssues} | HaveGetLate: {HaveGetLate} | Message: {Message}",
+                dealId,
+                dealResult.DataDeal?.LoaiDeal ?? "(chưa parse)",
+                dealResult.DataDeal?.TenKhachSan ?? "(chưa parse)",
+                dealResult.HaveError,
+                dealResult.HaveCreateIssues,
+                dealResult.HaveGetLate,
+                dealResult.Message);
+            if (_scanningSettings.DryRunDelaySeconds > 0)
+            {
+                _logger.LogInformation("[DRY RUN] Giả lập xử lý {Seconds}s cho deal {DealId}...", _scanningSettings.DryRunDelaySeconds, dealId);
+                await Task.Delay(TimeSpan.FromSeconds(_scanningSettings.DryRunDelaySeconds));
+            }
+            return new ProcessDealResult { Success = true, Message = $"[DRY RUN] Deal {dealId} logged, dừng xử lý." };
+        }
+
         if (dealResult.HaveGetLate)
-            return new ProcessDealResult { Success = true, Message = "Deal recently modified — skipped for now" };
+            return new ProcessDealResult { Success = true, Message = "Deal vừa được sửa đổi — tạm thời bỏ qua" };
 
         if (dealResult.HaveError)
         {
@@ -95,6 +127,7 @@ public class DealProcessingService : IDealProcessingService
             return new ProcessDealResult { Success = false, Message = dealResult.Message };
         }
 
+        // Nếu đã tạo issue thì lưu lại thông tin và dừng xử lý, không tạo lại issue
         if (dealResult.HaveCreateIssues)
         {
             var existing = await _dbService.GetDealByDealIdAsync(dealId);
@@ -125,16 +158,11 @@ public class DealProcessingService : IDealProcessingService
             return new ProcessDealResult { Success = false, Message = "Issue creation returned null key" };
 
         string jiraKey = issue.Key.ToString();
-        string jiraUrl = _buildJiraUrl(jiraKey);
+        string jiraUrl = await BuildJiraUrlAsync(jiraKey);
 
-        await _bitrixService.PostJiraDataToDealAsync(deal, jiraKey);
-
-        string successBody = BuildSuccessEmailHtml(deal.LinkCRM, jiraUrl);
-        await _emailService.SendEmailAsync(
-            ConfigJiraBitrix.MailInfo_Subject_Create_Iss_Success + " - DealID: " + dealId,
-            successBody,
-            deal.Responsible_Email);
-
+        // Lưu DB TRƯỚC khi gọi PostJiraDataToDealAsync để tránh tạo duplicate issue khi retry.
+        // Nếu PostJiraDataToDealAsync thất bại ở bước sau, DB đã ghi jiraKey →
+        // lần scan tiếp theo sẽ thấy HaveCreateIssues = true và dừng lại.
         var dbItem = await _dbService.GetDealByDealIdAsync(dealId);
         if (dbItem != null)
         {
@@ -157,6 +185,25 @@ public class DealProcessingService : IDealProcessingService
                 LastChangeData = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
             });
         }
+
+        // Ghi link Jira về Bitrix — nếu fail thì log lỗi nhưng không re-throw.
+        // DB đã lưu jiraKey nên retry sẽ không tạo thêm issue.
+        try
+        {
+            await _bitrixService.PostJiraDataToDealAsync(deal, jiraKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "PostJiraDataToDealAsync thất bại cho deal {DealId} / {JiraKey} — link Jira CHƯA được ghi vào Bitrix, cần xử lý thủ công",
+                dealId, jiraKey);
+        }
+
+        string successBody = BuildSuccessEmailHtml(deal.LinkCRM, jiraUrl);
+        await _emailService.SendEmailAsync(
+            ConfigJiraBitrix.MailInfo_Subject_Create_Iss_Success + " - DealID: " + dealId,
+            successBody,
+            deal.Responsible_Email);
 
         _logger.LogInformation("Successfully created Jira issue {JiraKey} for deal {DealId}", jiraKey, dealId);
         return new ProcessDealResult { Success = true, JiraKey = jiraKey, JiraUrl = jiraUrl, Message = "Issue created" };
@@ -194,8 +241,8 @@ public class DealProcessingService : IDealProcessingService
             string pipeline = dealResult.DataDeal?.Pipeline ?? "";
             bool isRenewal = pipeline == ((int)TYPE_PIPE_LINE.RENEWAL).ToString();
             string managerEmail = isRenewal
-                ? (await GetEmailSettingAsync("RenewalManagerEmail"))
-                : (await GetEmailSettingAsync("SalesManagerEmail"));
+                ? (await GetEmailSettingAsync("email_renewal_manager"))
+                : (await GetEmailSettingAsync("email_sales_manager"));
 
             bool isThird = checkResult.SaveTimeSendMailTo == (int)SAVE_TIME_SEND_MAIL_TO.TIME_SEND_MAIL_THIRD;
             string toEmail = isThird ? managerEmail : dealResult.ToAddressEmail;
@@ -245,12 +292,14 @@ public class DealProcessingService : IDealProcessingService
 
     private async Task<string> GetEmailSettingAsync(string key)
     {
-        var configs = await _dbService.GetConfigDatasAsync();
-        return configs.FirstOrDefault(c => c.KeyConfig == key)?.ValueConfig ?? "";
+        return await _dbService.GetSystemConfigAsync(key) ?? "";
     }
 
-    private string _buildJiraUrl(string jiraKey)
-        => $"https://jira.ezcloudhotel.com/browse/{jiraKey}";
+    private async Task<string> BuildJiraUrlAsync(string jiraKey)
+    {
+        string baseUrl = await _dbService.GetSystemConfigAsync("jira_url") ?? "https://jira.ezcloudhotel.com";
+        return $"{baseUrl}/browse/{jiraKey}";
+    }
 
     private static string BuildSuccessEmailHtml(string dealUrl, string issueUrl) =>
         $"<html><body><p>Issue đã được tạo thành công từ Bitrix</p>" +

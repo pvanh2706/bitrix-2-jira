@@ -1,5 +1,6 @@
 using BitrixJiraConnector.Api.BackgroundServices;
 using BitrixJiraConnector.Api.Configurations;
+using BitrixJiraConnector.Api.Middleware;
 using BitrixJiraConnector.Api.Models.Database;
 using BitrixJiraConnector.Api.Services;
 using BitrixJiraConnector.Api.Services.Interfaces;
@@ -10,9 +11,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService();
 
 // Options
-builder.Services.Configure<BitrixSettings>(builder.Configuration.GetSection("Bitrix"));
-builder.Services.Configure<JiraSettings>(builder.Configuration.GetSection("Jira"));
-builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
 builder.Services.Configure<ScanningSettings>(builder.Configuration.GetSection("Scanning"));
 
 // Database
@@ -27,7 +25,18 @@ builder.Services.AddSingleton<IDealLockService, DealLockService>();
 builder.Services.AddScoped<IDbService, DbService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IBitrixService, BitrixService>();
-builder.Services.AddScoped<IJiraService, JiraService>();
+
+var scanningSettings = builder.Configuration.GetSection("Scanning").Get<ScanningSettings>() ?? new ScanningSettings();
+if (scanningSettings.DryRun)
+{
+    builder.Services.AddScoped<IJiraService, DryRunJiraService>();
+    Console.WriteLine("[DRY RUN MODE] Jira issues sẽ KHÔNG được tạo thật.");
+}
+else
+{
+    builder.Services.AddScoped<IJiraService, JiraService>();
+}
+
 builder.Services.AddScoped<IDealProcessingService, DealProcessingService>();
 
 // Background service
@@ -52,5 +61,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseExceptionHandler("/error");
+app.UseMiddleware<ApiKeyMiddleware>();
 app.MapControllers();
 app.Run();

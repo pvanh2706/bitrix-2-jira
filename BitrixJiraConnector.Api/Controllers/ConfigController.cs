@@ -28,4 +28,18 @@ public class ConfigController : ControllerBase
         await _dbService.SaveConfigAsync(request.QuetLaiSau, request.GuiLaiEmailSau, request.SoNgayQuet);
         return Ok(ApiResponse<object>.Ok(null!, "Config saved"));
     }
+
+    [HttpGet("system")]
+    public async Task<ActionResult<ApiResponse<object>>> GetSystemConfigs()
+    {
+        var configs = await _dbService.GetAllSystemConfigsAsync();
+        return Ok(ApiResponse<object>.Ok(configs));
+    }
+
+    [HttpPut("system/{key}")]
+    public async Task<ActionResult<ApiResponse<object>>> UpdateSystemConfig(string key, [FromBody] UpdateSystemConfigRequest request)
+    {
+        await _dbService.UpdateSystemConfigAsync(key, request.Value);
+        return Ok(ApiResponse<object>.Ok(null!, "Đã lưu"));
+    }
 }

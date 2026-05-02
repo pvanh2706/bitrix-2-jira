@@ -6,6 +6,7 @@ const route = useRoute()
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '⬛' },
   { to: '/deals', label: 'Danh sách Deal', icon: '📋' },
+  { to: '/create-issue', label: 'Tạo Issue', icon: '➕' },
   { to: '/config', label: 'Cấu hình', icon: '⚙️' },
 ]
 </script>

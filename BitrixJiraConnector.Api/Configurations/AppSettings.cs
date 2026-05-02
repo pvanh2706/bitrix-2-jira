@@ -18,21 +18,9 @@ public class JiraSettings
     public string Password { get; set; } = "";
 }
 
-public class EmailSettings
-{
-    public string SendGridApiKey { get; set; } = "";
-    public string FromAddress { get; set; } = "";
-    public string FromName { get; set; } = "";
-    public string FallbackToAddress { get; set; } = "";
-    public string RenewalManagerEmail { get; set; } = "";
-    public string SalesManagerEmail { get; set; } = "";
-    public string AdminBitrixEmail { get; set; } = "";
-    public string AdminJiraEmail { get; set; } = "";
-}
-
 public class ScanningSettings
 {
-    public int IntervalMinutes { get; set; } = 5;
-    public int LookbackDays { get; set; } = 1;
-    public int ResendEmailAfterHours { get; set; } = 50;
+    public bool DryRun { get; set; } = false;
+    /// <summary>Giả lập thời gian xử lý khi DryRun = true. Dùng để test concurrency.</summary>
+    public int DryRunDelaySeconds { get; set; } = 0;
 }

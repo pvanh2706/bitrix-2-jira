@@ -6,3 +6,8 @@ public class SaveConfigRequest
     public int? GuiLaiEmailSau { get; set; }
     public int? SoNgayQuet { get; set; }
 }
+
+public class UpdateSystemConfigRequest
+{
+    public string Value { get; set; } = "";
+}

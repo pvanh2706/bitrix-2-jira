@@ -34,6 +34,14 @@ export interface ConfigData {
   description: string
 }
 
+// GET /api/config/system
+export interface SystemConfig {
+  id: number
+  configKey: string
+  configValue: string
+  description: string
+}
+
 // PUT /api/config
 export interface SaveConfigRequest {
   quetLaiSau?: number | null

@@ -129,6 +129,76 @@ namespace BitrixJiraConnector.Api.Migrations
 
                     b.ToTable("ExceptionLog");
                 });
+
+            modelBuilder.Entity("BitrixJiraConnector.Api.Models.Database.SystemConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+                    b.Property<string>("ConfigKey").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("ConfigValue").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("Description").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.ToTable("SystemConfigs");
+                });
+
+            modelBuilder.Entity("BitrixJiraConnector.Api.Models.Database.BitrixFieldMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+                    b.Property<string>("FieldKey").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("FieldLabel").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.ToTable("BitrixFieldMappings");
+                });
+
+            modelBuilder.Entity("BitrixJiraConnector.Api.Models.Database.DealTypeConfig", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+                    b.Property<string>("DealTypeId").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("DealTypeName").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("JiraProjectKey").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("JiraIssueTypeId").IsRequired().HasColumnType("TEXT");
+                    b.Property<int>("ShouldCreateIssue").HasColumnType("INTEGER");
+                    b.HasKey("Id");
+                    b.ToTable("DealTypeConfigs");
+                });
+
+            modelBuilder.Entity("BitrixJiraConnector.Api.Models.Database.DealTypeRequiredField", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+                    b.Property<string>("DealTypeId").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("FieldKey").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.ToTable("DealTypeRequiredFields");
+                });
+
+            modelBuilder.Entity("BitrixJiraConnector.Api.Models.Database.UserEmailMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+                    b.Property<string>("Email").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("JiraUsername").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.ToTable("UserEmailMappings");
+                });
+
+            modelBuilder.Entity("BitrixJiraConnector.Api.Models.Database.PipelineMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+                    b.Property<string>("CategoryId").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("PipelineName").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.ToTable("PipelineMappings");
+                });
 #pragma warning restore 612, 618
         }
     }

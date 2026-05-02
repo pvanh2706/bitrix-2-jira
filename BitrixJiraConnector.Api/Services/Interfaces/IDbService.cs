@@ -14,4 +14,13 @@ public interface IDbService
     Task SaveConfigAsync(int? quetLaiSau, int? guiLaiEmailSau, int? soNgayQuet);
     Task<List<ConfigData>> GetConfigDatasAsync();
     Task<int> GetScanIntervalMinutesAsync();
+
+    // Config tables
+    Task<List<string>> GetRequiredFieldsAsync(string dealTypeId);
+    Task<Dictionary<string, string>> GetAllFieldLabelsAsync();
+    Task<string?> GetJiraUsernameForEmailAsync(string email);
+    Task<string?> GetPipelineNameAsync(string categoryId);
+    Task<string?> GetSystemConfigAsync(string key);
+    Task<List<SystemConfig>> GetAllSystemConfigsAsync();
+    Task UpdateSystemConfigAsync(string key, string value);
 }
