@@ -12,6 +12,30 @@ const loading = ref(false)
 const result = ref<ProcessDealResult | null>(null)
 const isBackgroundProcessing = ref(false)
 
+// Countdown state for waiting-for-files case
+const countdown = ref(0)
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+function stopCountdown() {
+  if (countdownTimer !== null) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+  countdown.value = 0
+}
+
+function startCountdown(seconds: number, onExpire: () => void) {
+  stopCountdown()
+  countdown.value = seconds
+  countdownTimer = setInterval(() => {
+    countdown.value--
+    if (countdown.value <= 0) {
+      stopCountdown()
+      onExpire()
+    }
+  }, 1000)
+}
+
 /** Extract dealId from a plain number or a Bitrix deal URL */
 const parsedDealId = computed<number | null>(() => {
   const raw = input.value.trim()
@@ -62,16 +86,31 @@ watch(parsedDealId, (id) => {
   }
 })
 
-onUnmounted(stopPoll)
+onUnmounted(() => {
+  stopPoll()
+  stopCountdown()
+})
 
 async function handleCreate() {
   if (!parsedDealId.value) return
   stopPoll()
+  stopCountdown()
   loading.value = true
   result.value = null
   try {
     const res = await dealsApi.process(parsedDealId.value)
     const processResult = res.data.data
+
+    // Deal có tài liệu đang upload — hiển thị countdown và tự động retry
+    if (res.data.success && processResult?.isWaitingForFiles) {
+      result.value = processResult
+      const retryAfter = processResult.retryAfterSeconds > 0 ? processResult.retryAfterSeconds : 30
+      startCountdown(retryAfter, () => {
+        info('Đang thử lại...')
+        handleCreate()
+      })
+      return
+    }
 
     // Nếu deal đã được xử lý (bởi background service) — jiraKey sẽ null
     // Fallback: lấy thông tin Jira link từ DB
@@ -162,6 +201,24 @@ async function handleCreate() {
           <span>{{ loading ? 'Đang chờ background service xử lý xong...' : 'Tạo Issue' }}</span>
         </button>
 
+        <!-- Waiting for files upload banner -->
+        <transition name="fade">
+          <div
+            v-if="result?.isWaitingForFiles && countdown > 0"
+            class="flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm text-blue-800"
+          >
+            <span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent shrink-0" />
+            <span>
+              Deal có tài liệu đang được tải lên Bitrix. Tự động thử lại sau
+              <strong>{{ countdown }}s</strong>.
+              <button
+                class="ml-2 underline font-medium hover:opacity-70"
+                @click="() => { stopCountdown(); handleCreate() }"
+              >Thử ngay</button>
+            </span>
+          </div>
+        </transition>
+
         <!-- Background processing banner -->
         <transition name="fade">
           <div
@@ -175,7 +232,7 @@ async function handleCreate() {
 
         <!-- Result panel -->
         <transition name="fade">
-          <div v-if="result" :class="[
+          <div v-if="result && !result.isWaitingForFiles" :class="[
             'rounded-md border px-4 py-3 text-sm space-y-2',
             result.success
               ? 'bg-green-50 border-green-300 text-green-800'

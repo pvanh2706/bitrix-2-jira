@@ -27,6 +27,8 @@ export interface DealSummaryDto {
 // POST /api/deals/{id}/process
 export interface ProcessDealResult {
   success: boolean
+  isWaitingForFiles: boolean
+  retryAfterSeconds: number
   jiraKey: string | null
   jiraUrl: string | null
   message: string

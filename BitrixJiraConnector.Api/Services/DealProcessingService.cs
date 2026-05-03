@@ -119,7 +119,13 @@ public class DealProcessingService : IDealProcessingService
         }
 
         if (dealResult.HaveGetLate)
-            return new ProcessDealResult { Success = true, Message = "Deal vừa được sửa đổi — tạm thời bỏ qua" };
+            return new ProcessDealResult
+            {
+                Success = true,
+                IsWaitingForFiles = true,
+                RetryAfterSeconds = dealResult.RetryAfterSeconds,
+                Message = "Deal có tài liệu đang được tải lên, vui lòng thử lại sau khi upload hoàn tất",
+            };
 
         if (dealResult.HaveError)
         {

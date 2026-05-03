@@ -252,8 +252,16 @@ public class BitrixService : IBitrixService
             DateTime dateModified = DateTime.Parse((string)dataDealApi.DATE_MODIFY);
             if (dateModified.AddMinutes(3) >= DateTime.Now)
             {
-                result.HaveGetLate = true;
-                return result;
+                // Chỉ chờ khi deal có file đính kèm (cần chờ upload hoàn tất).
+                // Nếu không có file thì không cần đợi 3 phút — xử lý ngay.
+                JToken fileCheck = dataDealApi.UF_CRM_1613788692724;
+                bool hasFiles = fileCheck != null && fileCheck.Any();
+                if (hasFiles)
+                {
+                    result.HaveGetLate = true;
+                    result.RetryAfterSeconds = Math.Max(1, (int)Math.Ceiling((dateModified.AddMinutes(3) - DateTime.Now).TotalSeconds));
+                    return result;
+                }
             }
         }
 

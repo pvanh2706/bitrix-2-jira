@@ -6,6 +6,7 @@ public class BitrixDataDealApiResult
     public bool HaveError { get; set; }
     public bool HaveCreateIssues { get; set; }
     public bool HaveGetLate { get; set; }
+    public int RetryAfterSeconds { get; set; }
     public string Message { get; set; } = "";
     public string ToAddressEmail { get; set; } = "";
 }
